@@ -1,15 +1,15 @@
 {
   "domain": "g4smobility",
   "name": "G4S Mobility",
-  "version": "0.0.1",
+  "codeowners": ["@bkbilly"],
   "config_flow": true,
+  "dependencies": [],
   "documentation": "https://github.com/bkbilly/G4S-Mobility",
+  "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/bkbilly/G4S-Mobility/issues",
   "requirements": [
     "beautifulsoup4>=4.12.3"
   ],
-  "dependencies": [],
-  "iot_class": "cloud_polling",
-  "codeowners": ["@bkbilly"]
+  "version": "0.0.1"
 }
 
