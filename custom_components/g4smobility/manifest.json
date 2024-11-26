@@ -1,0 +1,13 @@
+{
+  "domain": "g4smobility",
+  "name": "G4S Mobility",
+  "version": "0.0.1",
+  "config_flow": true,
+  "requirements": [
+    "beautifulsoup4>=4.12.3"
+  ],
+  "dependencies": [],
+  "iot_class": "cloud_polling",
+  "codeowners": ["@bkbilly"]
+}
+
