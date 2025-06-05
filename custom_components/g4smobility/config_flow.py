@@ -1,142 +1,145 @@
+"""Config flow for 3DTracking integration."""
 import logging
+import asyncio
+from typing import Any, Dict, Optional # Added Optional
 
+import aiohttp
+import async_timeout
 import voluptuous as vol
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.config_entries import (
-    CONN_CLASS_LOCAL_POLL,
-    OptionsFlow,
-    ConfigFlow,
-)
-from homeassistant.core import (
-    callback,
-    HomeAssistant,
-)
 
-from . import CannotConnect, async_connect_or_timeout
-from .const import (  # pylint:disable=unused-import
+from homeassistant import config_entries
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+from homeassistant.core import callback
+from homeassistant.helpers import config_validation as cv # For vol.All
+
+from .const import (
     DOMAIN,
-    CONF_USERNAME,
-    CONF_PASSWORD,
-    CONF_POLLING_RATE,
-    DEFAULT_POLLING_RATE,
+    API_AUTH_URL,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+    MAX_SCAN_INTERVAL,
 )
-
-from .g4smobility import G4SMobility
-
+from .api import ThreeDTrackingApiClient, ThreeDTrackingAuthError, ThreeDTrackingApiClientError
 
 _LOGGER = logging.getLogger(__name__)
 
-# This is the schema that used to display the UI to the user. This simple
-# schema has a single required host field, but it could include a number of fields
-# such as username, password etc. See other components in the HA core code for
-# further examples.
-# Note the input displayed to the user will be translated. See the
-# translations/<lang>.json file and strings.json. See here for further information:
-# https://developers.home-assistant.io/docs/config_entries_config_flow_handler/#translations
-# At the time of writing I found the translations created by the scaffold didn't
-# quite work as documented and always gave me the "Lokalise key references" string
-# (in square brackets), rather than the actual translated value. I did not attempt to
-# figure this out or look further into it.
 DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Optional(CONF_POLLING_RATE, default=DEFAULT_POLLING_RATE): str,
     }
 )
 
-
-async def validate_input(hass: HomeAssistant, data: dict):
-    try:
-        pollingInt = int(data[CONF_POLLING_RATE])
-        if pollingInt < 1:
-            raise InvalidPolling
-    except:
-        raise InvalidPolling
-    try:
-        g4smobility = await hass.async_add_executor_job(G4SMobility, data[CONF_USERNAME], data[CONF_PASSWORD])
-    except:
-        raise CannotConnect
-
-    info = await async_connect_or_timeout(hass, g4smobility)
-
-    return {"title": data[CONF_USERNAME]}
-
-
-class ConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Hello World."""
+class ThreeDTrackingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for 3DTracking."""
 
     VERSION = 1
-    # Pick one of the available connection classes in homeassistant/config_entries.py
-    # This tells HA if it should be asking for updates, or it'll be notified of updates
-    # automatically. This example uses PUSH, as the dummy hub will notify HA of
-    # changes.
-    CONNECTION_CLASS = CONN_CLASS_LOCAL_POLL
+    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return ThreeDTrackingOptionsFlowHandler(config_entry)
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(self, user_input: Optional[Dict[str, Any]] = None):
         """Handle the initial step."""
-        # This goes through the steps to take the user through the setup process.
-        # Using this it is possible to update the UI and prompt for additional
-        # information. This example provides a single form (built from `DATA_SCHEMA`),
-        # and when that has some validated input, it calls `async_create_entry` to
-        # actually create the HA config entry. Note the "title" value is returned by
-        # `validate_input` above.
-        errors = {}
+        errors: Dict[str, str] = {}
         if user_input is not None:
+            username = user_input[CONF_USERNAME]
+            password = user_input[CONF_PASSWORD]
+
+            temp_session = aiohttp.ClientSession()
+            client = ThreeDTrackingApiClient(temp_session, username, password)
+
             try:
-                info = await validate_input(self.hass, user_input)
+                await client.async_authenticate()
+                await temp_session.close()
 
-                return self.async_create_entry(title=info["title"], data=user_input)
-            except CannotConnect:
+                await self.async_set_unique_id(username)
+                self._abort_if_unique_id_configured()
+
+                # Add default scan interval to the main data initially if desired,
+                # or just rely on options flow. For simplicity, we'll let options handle it.
+                # user_input[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
+
+                return self.async_create_entry(title=f"3DTracking ({username})", data=user_input)
+
+            except ThreeDTrackingAuthError:
+                _LOGGER.warning("Invalid credentials for 3DTracking username: %s", username)
+                errors["base"] = "invalid_auth"
+            except (ThreeDTrackingApiClientError, aiohttp.ClientError) as err:
+                _LOGGER.error("API error during 3DTracking config flow: %s", err)
                 errors["base"] = "cannot_connect"
-            except InvalidPolling:
-                errors["base"] = "invalid_polling"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
+            except asyncio.TimeoutError:
+                _LOGGER.error("Timeout connecting to 3DTracking API during config flow.")
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error during 3DTracking config flow:")
                 errors["base"] = "unknown"
+            finally:
+                if not temp_session.closed:
+                    await temp_session.close()
 
-        # If there is no user input or there were errors, show the form again, including any errors that were found with the input.
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
 
+    # _async_current_entries can be removed if not used, it was specific to an older HA version's example
+    # @callback
+    # def _async_current_entries(self):
+    #     """Return the current entries for this flow."""
+    #     # This is not standard and likely not needed.
+    #     # If you need to access current entries, use self.hass.config_entries.async_entries(DOMAIN)
+    #     return [] # Placeholder
 
-class OptionsFlowHandler(OptionsFlow):
-    """Handle options."""
 
-    def __init__(self, config_entry):
+class ThreeDTrackingOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle an options flow for 3DTracking."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self.config_entry = config_entry
 
-    async def async_step_init(self, user_input=None):
+    async def async_step_init(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+        errors: Dict[str, str] = {}
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_POLLING_RATE,
-                        default=self.config_entry.options.get(
-                            CONF_POLLING_RATE, DEFAULT_POLLING_RATE
-                        ),
-                    ): str,
-                }
-            ),
+        if user_input is not None:
+            # Validate scan interval
+            scan_interval = user_input.get(CONF_SCAN_INTERVAL)
+            if not (MIN_SCAN_INTERVAL <= scan_interval <= MAX_SCAN_INTERVAL):
+                errors["base"] = "invalid_scan_interval" # Or more specific error for CONF_SCAN_INTERVAL
+                _LOGGER.error(
+                    "Invalid scan interval: %s. Must be between %s and %s seconds.",
+                    scan_interval,
+                    MIN_SCAN_INTERVAL,
+                    MAX_SCAN_INTERVAL,
+                )
+            else:
+                # Create new options dictionary with the updated scan_interval
+                new_options = self.config_entry.options.copy()
+                new_options[CONF_SCAN_INTERVAL] = scan_interval
+                return self.async_create_entry(title="", data=new_options)
+
+
+        # Define the schema for the options form
+        options_schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_SCAN_INTERVAL,
+                    default=self.config_entry.options.get(
+                        CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                    ),
+                ): vol.All(cv.positive_int, vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)),
+            }
         )
 
-
-class InvalidPolling(HomeAssistantError):
-    """Error to indicate we cannot use the polling rate"""
-
-
-class CannotConnect(HomeAssistantError):
-    """Error to indicate we cannot use the polling rate"""
+        return self.async_show_form(
+            step_id="init", data_schema=options_schema, errors=errors
+        )
