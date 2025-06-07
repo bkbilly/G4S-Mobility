@@ -24,6 +24,5 @@ Easiest install is via [HACS](https://hacs.xyz/):
  - Go to the Home Assistant configuration panel ("Configuration" -> "Integrations")
  - Click on "Add Integration" and search for "G4S Mobility"
  - Enter your G4S Mobility username and password
- - (Optionally) Configure polling interval for data updates
  - Submit the configuration
 

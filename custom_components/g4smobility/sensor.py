@@ -219,7 +219,9 @@ class ThreeDTrackingDynamicSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = final_props.get("device_class")
         self._attr_state_class = final_props.get("state_class")
         if final_props.get("icon") is not None:
-            self._attr_icon = final_props.get("icon") # Icon from map takes precedence
+            self._attr_icon = final_props.get("icon")
+        if final_props.get("entity_category") is not None:
+            self._attr_entity_category = final_props.get("entity_category")
         
         # Unit of measurement from map is primary
         self._attr_native_unit_of_measurement = final_props.get("native_unit_of_measurement")
@@ -287,7 +289,6 @@ class ThreeDTrackingDynamicSensor(CoordinatorEntity, SensorEntity):
                     self._attr_native_unit_of_measurement = api_unit
         
         self._attr_extra_state_attributes["sensor_type"] = current_reading_data.get("SensorType")
-        self._attr_extra_state_attributes["reading_time_local"] = current_reading_data.get("ReadingTimeLocal")
 
 
     @callback

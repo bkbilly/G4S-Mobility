@@ -161,17 +161,19 @@ SENSOR_READING_TYPE_MAP: dict[str, dict[str, Any]] = {
         "device_class": None,
         "state_class": SensorStateClass.MEASUREMENT,
         "icon": "mdi:satellite-variant",
+        "entity_category": EntityCategory.DIAGNOSTIC,
+    },
+    "GSM Signal Strength": {
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "icon": "mdi:signal",
+        "entity_category": EntityCategory.DIAGNOSTIC,
     },
     "External Battery": {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "native_unit_of_measurement": "V",
         "icon": "mdi:car-battery",
-    },
-    "GSM Signal Strength": {
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "icon": "mdi:signal",
     },
     "Battery": { # For internal battery percentage
         "device_class": SensorDeviceClass.BATTERY,

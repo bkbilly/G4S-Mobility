@@ -78,7 +78,7 @@ class ThreeDTrackingApiClient:
             "UserIdGuid": self._user_id_guid,
             "SessionId": self._session_id,
         }
-        last_date_received_utc = datetime.now(timezone.utc) - timedelta(hours=12)
+        last_date_received_utc = datetime.now(timezone.utc) - timedelta(days=30)
         params["LastDateReceivedUtc"] = last_date_received_utc.strftime("%d %b %Y %H:%M:%S")
 
         _LOGGER.debug("Requesting latest positions from 3DTracking API")
